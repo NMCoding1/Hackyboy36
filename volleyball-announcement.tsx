@@ -1,16 +1,32 @@
-import React, { useState, useRef, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Users, PartyPopper } from "lucide-react"
+import { db } from "@/lib/firebase"
+import { collection, addDoc, onSnapshot, deleteDoc, doc, query, orderBy } from "firebase/firestore"
 
 const VolleyballAnnouncement = () => {
-  const [players, setPlayers] = useState<string[]>([])
+  const [players, setPlayers] = useState<{ id: string; name: string }[]>([])
   const [playerName, setPlayerName] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  const playersRef = collection(db, "volleyballPlayers")
+
+  useEffect(() => {
+    const q = query(playersRef, orderBy("timestamp"))
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetched = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        name: doc.data().name,
+      }))
+      setPlayers(fetched)
+    })
+    return () => unsubscribe()
+  }, [])
 
   useEffect(() => {
     if (isDialogOpen) {
@@ -18,20 +34,23 @@ const VolleyballAnnouncement = () => {
     }
   }, [isDialogOpen])
 
-  const handleJoinGame = () => {
+  const handleJoinGame = async () => {
     const trimmed = playerName.trim()
     if (
       trimmed &&
-      !players.some((name) => name.toLowerCase() === trimmed.toLowerCase())
+      !players.some((p) => p.name.toLowerCase() === trimmed.toLowerCase())
     ) {
-      setPlayers([...players, trimmed])
+      await addDoc(playersRef, {
+        name: trimmed,
+        timestamp: Date.now(),
+      })
     }
     setPlayerName("")
     setIsDialogOpen(false)
   }
 
-  const handleRemovePlayer = (nameToRemove: string) => {
-    setPlayers(players.filter((name) => name !== nameToRemove))
+  const handleRemovePlayer = async (id: string) => {
+    await deleteDoc(doc(playersRef, id))
   }
 
   return (
@@ -60,14 +79,10 @@ const VolleyballAnnouncement = () => {
           <ScrollArea className="h-40 border rounded-md p-2">
             {players.length > 0 ? (
               <ul className="space-y-1">
-                {players.map((name, index) => (
-                  <li key={index} className="flex justify-between items-center">
-                    <span>{name}</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemovePlayer(name)}
-                    >
+                {players.map((p) => (
+                  <li key={p.id} className="flex justify-between items-center">
+                    <span>{p.name}</span>
+                    <Button variant="ghost" size="sm" onClick={() => handleRemovePlayer(p.id)}>
                       Remove
                     </Button>
                   </li>
